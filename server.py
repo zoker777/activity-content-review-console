@@ -509,6 +509,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             self.handle_get()
+        except (BrokenPipeError, ConnectionResetError):
+            return
         except ValueError as exc:
             self.send_error_json(str(exc), HTTPStatus.BAD_REQUEST)
         except FileNotFoundError:
@@ -519,6 +521,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             self.handle_post()
+        except (BrokenPipeError, ConnectionResetError):
+            return
         except ValueError as exc:
             self.send_error_json(str(exc), HTTPStatus.BAD_REQUEST)
         except Exception as exc:
@@ -652,7 +656,10 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             with path.open("rb") as file:
                 file.seek(start)
-                self.wfile.write(file.read(length))
+                try:
+                    self.wfile.write(file.read(length))
+                except (BrokenPipeError, ConnectionResetError):
+                    return
             return
 
         self.send_response(HTTPStatus.OK)
@@ -665,7 +672,10 @@ class Handler(BaseHTTPRequestHandler):
                 chunk = file.read(1024 * 256)
                 if not chunk:
                     break
-                self.wfile.write(chunk)
+                try:
+                    self.wfile.write(chunk)
+                except (BrokenPipeError, ConnectionResetError):
+                    return
 
 
 def main():

@@ -104,7 +104,7 @@ async function loadPlatforms() {
     return;
   }
 
-  state.platform = platforms[0];
+  state.platform = platforms.includes("xhs") ? "xhs" : platforms[0];
   els.platformSelect.value = state.platform;
   await loadTree();
 }
