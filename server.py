@@ -28,6 +28,18 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def format_xhs_time(value):
+    if value in (None, ""):
+        return ""
+    try:
+        timestamp = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if timestamp > 10_000_000_000:
+        timestamp = timestamp / 1000
+    return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def ensure_inside(root, target):
     root = root.resolve()
     target = target.resolve()
@@ -47,38 +59,8 @@ def parse_json_body(handler):
         raise ValueError(f"invalid json: {exc}") from exc
 
 
-def pick_first(data, keys, default=""):
-    for key in keys:
-        value = data
-        ok = True
-        for part in key.split("."):
-            if isinstance(value, dict) and part in value:
-                value = value[part]
-            else:
-                ok = False
-                break
-        if ok and value not in (None, ""):
-            return value
-    return default
-
-
 def normalize_note(raw, platform, category, activity, source_file):
-    note_id = str(
-        pick_first(
-            raw,
-            [
-                "note_id",
-                "noteId",
-                "id",
-                "aweme_id",
-                "awemeId",
-                "item_id",
-                "itemId",
-                "video_id",
-                "videoId",
-            ],
-        )
-    ).strip()
+    note_id = str(raw.get("note_id", "")).strip()
     if not note_id:
         return None
 
@@ -87,12 +69,20 @@ def normalize_note(raw, platform, category, activity, source_file):
         "category_name": category,
         "activity_name": activity,
         "note_id": note_id,
-        "title": str(pick_first(raw, ["title", "display_title", "desc", "description"], "")),
-        "content": str(pick_first(raw, ["content", "desc", "description", "text"], "")),
-        "author": pick_first(raw, ["author", "nickname", "user.nickname", "user.name"], ""),
-        "source_url": pick_first(raw, ["source_url", "url", "share_url", "shareUrl"], ""),
-        "publish_time": pick_first(raw, ["publish_time", "publishTime", "time", "create_time", "createTime"], ""),
-        "crawl_time": pick_first(raw, ["crawl_time", "crawlTime", "collected_at", "collectedAt"], ""),
+        "title": str(raw.get("title", "")),
+        "content": str(raw.get("desc", "")),
+        "author": raw.get("nickname", ""),
+        "source_url": raw.get("note_url", ""),
+        "publish_time": format_xhs_time(raw.get("time", "")),
+        "crawl_time": "",
+        "note_type": raw.get("type", ""),
+        "liked_count": raw.get("liked_count", ""),
+        "collected_count": raw.get("collected_count", ""),
+        "comment_count": raw.get("comment_count", ""),
+        "share_count": raw.get("share_count", ""),
+        "source_keyword": raw.get("source_keyword", ""),
+        "tag_list": raw.get("tag_list", ""),
+        "avatar": raw.get("avatar", ""),
         "source_file": source_file,
         "raw": raw,
     }
@@ -324,6 +314,14 @@ class App:
                         "source_url",
                         "publish_time",
                         "crawl_time",
+                        "note_type",
+                        "liked_count",
+                        "collected_count",
+                        "comment_count",
+                        "share_count",
+                        "source_keyword",
+                        "tag_list",
+                        "avatar",
                         "source_file",
                     ]},
                     "keywords": self.activity_keywords(category, activity),

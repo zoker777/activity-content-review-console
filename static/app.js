@@ -65,6 +65,34 @@ function keywordBadges(keywords) {
   return (keywords || []).map((keyword) => `<span class="badge">${escapeHtml(keyword)}</span>`).join("");
 }
 
+function tagBadges(tagList) {
+  return String(tagList || "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .map((tag) => `<span class="badge">${escapeHtml(tag)}</span>`)
+    .join("");
+}
+
+function noteTypeLabel(type) {
+  return {
+    video: "视频笔记",
+    normal: "图文笔记",
+  }[type] || type || "未知类型";
+}
+
+function metricBadges(note) {
+  return [
+    ["赞", note.liked_count],
+    ["藏", note.collected_count],
+    ["评", note.comment_count],
+    ["转", note.share_count],
+  ]
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([label, value]) => `<span class="badge">${label} ${escapeHtml(value)}</span>`)
+    .join("");
+}
+
 async function loadPlatforms() {
   const { platforms } = await api("/api/platforms");
   els.platformSelect.innerHTML = platforms
@@ -194,8 +222,10 @@ async function loadNotes() {
           <p>${escapeHtml(note.content || "暂无正文")}</p>
           <div class="badge-row">
             <span class="badge ${statusClass(note.review.status)}">${statusLabel(note.review.status)}</span>
+            <span class="badge">${escapeHtml(noteTypeLabel(note.note_type))}</span>
             <span class="badge">${note.image_count} 图</span>
             <span class="badge">${note.video_count} 视频</span>
+            ${note.source_keyword ? `<span class="badge">词 ${escapeHtml(note.source_keyword)}</span>` : ""}
             ${keywordBadges(note.keywords)}
             ${note.submit?.submit_status ? `<span class="badge ok">录入 ${escapeHtml(note.submit.submit_status)}</span>` : ""}
           </div>
@@ -230,24 +260,29 @@ async function loadDetail(noteId) {
 
   els.noteDetail.innerHTML = `
     <article class="detail">
-      <div>
+      <div class="detail-title-row">
         <h2>${escapeHtml(title)}</h2>
         <div class="badge-row" style="margin-top: 10px">
           <span class="badge ${statusClass(note.review.status)}">${statusLabel(note.review.status)}</span>
           <span class="badge">${escapeHtml(note.note_id)}</span>
+          <span class="badge">${escapeHtml(noteTypeLabel(note.note_type))}</span>
+          ${note.source_keyword ? `<span class="badge">来源词 ${escapeHtml(note.source_keyword)}</span>` : ""}
           ${keywordBadges(note.keywords)}
           ${note.submit?.submit_status ? `<span class="badge ok">录入 ${escapeHtml(note.submit.submit_status)}</span>` : ""}
         </div>
       </div>
 
-      <div class="meta">
-        <span>作者：${escapeHtml(note.author || "未知")}</span>
-        <span>发布时间：${escapeHtml(note.publish_time || "未知")}</span>
-        <span>来源文件：${escapeHtml(note.source_file || "未知")}</span>
-        ${note.source_url ? `<a href="${escapeHtml(note.source_url)}" target="_blank" rel="noreferrer">打开原始链接</a>` : ""}
+      <div class="author-row">
+        ${note.avatar ? `<img class="author-avatar" src="${escapeHtml(note.avatar)}" alt="${escapeHtml(note.author || "作者头像")}" />` : ""}
+        <div class="meta">
+          <span>作者：${escapeHtml(note.author || "未知")}</span>
+          <span>发布时间：${escapeHtml(note.publish_time || "未知")}</span>
+          <span>来源文件：${escapeHtml(note.source_file || "未知")}</span>
+        </div>
       </div>
 
       <div class="actions">
+        ${note.source_url ? `<a class="primary-link-button" href="${escapeHtml(note.source_url)}" target="_blank" rel="noreferrer">打开小红书原文</a>` : ""}
         <button class="primary-button" data-action="approve" type="button">标记符合</button>
         <button class="danger-button" data-action="reject" type="button">标记不符合</button>
         <button class="ghost-button" data-action="unmark" type="button">恢复未标记</button>
@@ -257,6 +292,19 @@ async function loadDetail(noteId) {
             : ""
         }
       </div>
+
+      <div class="badge-row">
+        ${metricBadges(note)}
+      </div>
+
+      ${
+        note.tag_list
+          ? `<section class="media-section">
+              <h3>标签</h3>
+              <div class="badge-row">${tagBadges(note.tag_list)}</div>
+            </section>`
+          : ""
+      }
 
       <section>
         <div class="detail-content">${escapeHtml(note.content || "暂无正文")}</div>
@@ -282,11 +330,6 @@ async function loadDetail(noteId) {
               : '<span class="meta">无视频</span>'
           }
         </div>
-      </section>
-
-      <section class="media-section">
-        <h3>原始 JSON</h3>
-        <pre class="raw-json">${escapeHtml(JSON.stringify(note.raw, null, 2))}</pre>
       </section>
     </article>
   `;
