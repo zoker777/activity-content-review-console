@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>活动内容审核控制台</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">审</div>
+        <div>
+          <h1>活动内容审核</h1>
+          <p>原始数据直读</p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>平台</span>
+        <select id="platformSelect"></select>
+      </label>
+
+      <div class="tree-block">
+        <div class="tree-title">活动分类</div>
+        <div id="categoryTree" class="tree"></div>
+      </div>
+
+      <button id="syncButton" class="ghost-button" type="button">同步采集索引</button>
+      <div id="syncResult" class="side-note"></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="toolbar">
+        <div>
+          <h2 id="pageTitle">请选择活动</h2>
+          <p id="pageSubtitle">从左侧选择平台、大类和细分活动</p>
+        </div>
+        <div class="filters">
+          <button class="filter active" data-status="visible" type="button">可见</button>
+          <button class="filter" data-status="unmarked" type="button">未标记</button>
+          <button class="filter" data-status="approved" type="button">符合</button>
+          <button class="filter" data-status="rejected" type="button">不符合</button>
+        </div>
+      </header>
+
+      <section class="content-grid">
+        <section class="list-panel">
+          <div class="panel-head">
+            <strong>笔记列表</strong>
+            <span id="noteCount">0 篇</span>
+          </div>
+          <div id="noteList" class="note-list empty">暂无数据</div>
+        </section>
+
+        <section class="detail-panel">
+          <div id="noteDetail" class="detail-empty">选择一篇笔记查看详情</div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
