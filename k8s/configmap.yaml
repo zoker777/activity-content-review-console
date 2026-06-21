@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: activity-review-console-config
+  namespace: devops
+data:
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  DB_PATH: "/app/data/db/app.sqlite3"
+  RAW_DATA_ROOT: "/app/data/raw"
+  MANIFEST_PATH: "/app/data/manifest.json"

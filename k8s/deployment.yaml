@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: activity-review-console
+  namespace: devops
+  labels:
+    app: activity-review-console
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: activity-review-console
+  template:
+    metadata:
+      labels:
+        app: activity-review-console
+    spec:
+      containers:
+        - name: app
+          image: activity-review-console:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: activity-review-console-config
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: sqlite-db
+              mountPath: /app/data/db
+            - name: raw-data
+              mountPath: /app/data/raw
+              readOnly: true
+      volumes:
+        - name: sqlite-db
+          persistentVolumeClaim:
+            claimName: activity-review-sqlite-pvc
+        - name: raw-data
+          nfs:
+            server: 10.0.2.96
+            path: /data/nfs/k8s/crawl
