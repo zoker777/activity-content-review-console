@@ -5,6 +5,7 @@ const state = {
   status: "visible",
   notes: [],
   selectedNoteId: "",
+  detailNote: null,
   activityKeywords: [],
   expandedCategory: "",
 };
@@ -123,6 +124,7 @@ async function loadTree() {
   state.category = "";
   state.activity = "";
   state.selectedNoteId = "";
+  state.detailNote = null;
   state.activityKeywords = [];
   state.expandedCategory = "";
   els.noteDetail.innerHTML = '<div class="detail-empty">选择一篇笔记查看详情</div>';
@@ -219,6 +221,11 @@ async function loadNotes() {
   );
 
   state.notes = notes;
+  renderNotes();
+}
+
+function renderNotes() {
+  const { notes } = state;
   els.noteCount.textContent = `${notes.length} 篇`;
 
   if (notes.length === 0) {
@@ -268,6 +275,11 @@ async function loadDetail(noteId) {
     })}`,
   );
 
+  state.detailNote = note;
+  renderDetail(note);
+}
+
+function renderDetail(note) {
   const title = note.title || note.content || note.note_id;
   const approved = note.review.status === "approved";
   const submitted = note.submit?.submit_status === "success";
@@ -353,9 +365,14 @@ async function loadDetail(noteId) {
   });
 }
 
+function noteMatchesCurrentFilter(reviewStatus) {
+  if (state.status === "visible") return reviewStatus !== "rejected";
+  return reviewStatus === state.status;
+}
+
 async function handleAction(action, noteId) {
   if (action === "submit") {
-    await api("/api/notes/submit", {
+    const { submit } = await api("/api/notes/submit", {
       method: "POST",
       body: JSON.stringify({
         platform: state.platform,
@@ -366,9 +383,12 @@ async function handleAction(action, noteId) {
         targetRecordId: `mock-${Date.now()}`,
       }),
     });
+    const listNote = state.notes.find((note) => note.note_id === noteId);
+    if (listNote) listNote.submit = submit;
+    if (state.detailNote?.note_id === noteId) state.detailNote.submit = submit;
   } else {
     const status = action === "approve" ? "approved" : action === "reject" ? "rejected" : "unmarked";
-    await api("/api/notes/review", {
+    const { review } = await api("/api/notes/review", {
       method: "POST",
       body: JSON.stringify({
         platform: state.platform,
@@ -378,17 +398,22 @@ async function handleAction(action, noteId) {
         status,
       }),
     });
+    const listNote = state.notes.find((note) => note.note_id === noteId);
+    if (listNote) listNote.review = review;
+    if (state.detailNote?.note_id === noteId) state.detailNote.review = review;
+
+    if (!noteMatchesCurrentFilter(review.status)) {
+      state.notes = state.notes.filter((note) => note.note_id !== noteId);
+      state.selectedNoteId = "";
+      state.detailNote = null;
+      renderNotes();
+      els.noteDetail.innerHTML = '<div class="detail-empty">当前笔记已从列表隐藏</div>';
+      return;
+    }
   }
 
-  await loadNotes();
-  const stillVisible = state.notes.some((note) => note.note_id === noteId);
-  if (stillVisible) {
-    state.selectedNoteId = noteId;
-    await loadDetail(noteId);
-  } else {
-    state.selectedNoteId = "";
-    els.noteDetail.innerHTML = '<div class="detail-empty">当前笔记已从列表隐藏</div>';
-  }
+  renderNotes();
+  if (state.detailNote?.note_id === noteId) renderDetail(state.detailNote);
 }
 
 els.platformSelect.addEventListener("change", async () => {

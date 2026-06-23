@@ -4,7 +4,9 @@ import json
 import mimetypes
 import os
 import sqlite3
+import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +24,8 @@ VALID_REVIEW_STATUS = {"unmarked", "approved", "rejected"}
 VALID_SUBMIT_STATUS = {"pending", "success", "failed"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".m4v", ".avi"}
+MAX_CACHED_ACTIVITIES = 50
+CACHE_TTL_SECONDS = 30 * 60
 
 
 def utc_now():
@@ -93,6 +97,10 @@ class App:
         self.raw_root = Path(raw_root).resolve()
         self.db_path = Path(db_path).resolve()
         self.manifest_path = Path(manifest_path).resolve()
+        self.notes_cache = {}
+        self.media_cache = {}
+        self.activity_access = OrderedDict()
+        self.cache_lock = threading.RLock()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.init_db()
 
@@ -224,10 +232,56 @@ class App:
     def activity_dir(self, platform, category, activity):
         return ensure_inside(self.raw_root, self.raw_root / platform / category / activity)
 
+    def activity_cache_key(self, platform, category, activity):
+        return (platform, category, activity)
+
+    def evict_activity_cache_locked(self, activity_key):
+        self.activity_access.pop(activity_key, None)
+        self.notes_cache.pop(activity_key, None)
+        for media_key in [key for key in self.media_cache if key[:3] == activity_key]:
+            del self.media_cache[media_key]
+
+    def touch_activity_cache(self, activity_key):
+        now = time.monotonic()
+        with self.cache_lock:
+            expired = [
+                key
+                for key, last_accessed in self.activity_access.items()
+                if now - last_accessed > CACHE_TTL_SECONDS
+            ]
+            for key in expired:
+                self.evict_activity_cache_locked(key)
+
+            self.activity_access[activity_key] = now
+            self.activity_access.move_to_end(activity_key)
+            while len(self.activity_access) > MAX_CACHED_ACTIVITIES:
+                oldest_key = next(iter(self.activity_access))
+                self.evict_activity_cache_locked(oldest_key)
+
+    def jsonl_signature(self, jsonl_dir):
+        if not jsonl_dir.exists():
+            return ()
+        signature = []
+        for file_path in sorted(jsonl_dir.glob("*.jsonl")):
+            stat = file_path.stat()
+            signature.append((str(file_path), stat.st_mtime_ns, stat.st_size))
+        return tuple(signature)
+
     def read_activity_notes(self, platform, category, activity):
         base = self.activity_dir(platform, category, activity)
         jsonl_dir = ensure_inside(self.raw_root, base / "jsonl")
+        cache_key = self.activity_cache_key(platform, category, activity)
+        self.touch_activity_cache(cache_key)
+        signature = self.jsonl_signature(jsonl_dir)
+        with self.cache_lock:
+            cached = self.notes_cache.get(cache_key)
+        if cached and cached["signature"] == signature:
+            return list(cached["notes"])
+
         if not jsonl_dir.exists():
+            with self.cache_lock:
+                self.touch_activity_cache(cache_key)
+                self.notes_cache[cache_key] = {"signature": signature, "notes": []}
             return []
 
         notes = {}
@@ -247,19 +301,36 @@ class App:
                         continue
                     note["line_no"] = line_no
                     notes[note["note_id"]] = note
-        return list(notes.values())
+        result = list(notes.values())
+        with self.cache_lock:
+            self.touch_activity_cache(cache_key)
+            self.notes_cache[cache_key] = {"signature": signature, "notes": result}
+        return list(result)
 
     def media_files(self, platform, category, activity, note_id, kind):
         base = self.activity_dir(platform, category, activity)
         media_dir = ensure_inside(self.raw_root, base / kind / note_id)
+        cache_key = (platform, category, activity, note_id, kind)
+        activity_key = self.activity_cache_key(platform, category, activity)
+        self.touch_activity_cache(activity_key)
         if not media_dir.exists() or not media_dir.is_dir():
+            with self.cache_lock:
+                self.touch_activity_cache(activity_key)
+                self.media_cache[cache_key] = {"signature": None, "files": []}
             return []
+
+        signature = media_dir.stat().st_mtime_ns
+        with self.cache_lock:
+            cached = self.media_cache.get(cache_key)
+        if cached and cached["signature"] == signature:
+            return list(cached["files"])
+
         allowed = IMAGE_EXTENSIONS if kind == "images" else VIDEO_EXTENSIONS
-        files = []
-        for item in sorted(media_dir.iterdir()):
-            if item.is_file() and item.suffix.lower() in allowed:
-                files.append(item.name)
-        return files
+        files = [item.name for item in sorted(media_dir.iterdir()) if item.is_file() and item.suffix.lower() in allowed]
+        with self.cache_lock:
+            self.touch_activity_cache(activity_key)
+            self.media_cache[cache_key] = {"signature": signature, "files": files}
+        return list(files)
 
     def review_map(self, platform, category, activity):
         with self.connect() as conn:
