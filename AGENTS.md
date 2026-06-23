@@ -106,15 +106,43 @@ platform + category_name + activity_name + note_id
 
 爬虫应在原始数据成功落盘后，再调用采集标记接口写入 `collected_notes`。
 
+## 内存缓存
+
+`notes_cache`、`media_cache` 和 `activity_access` 是后端的活动级内存 LRU/TTL 缓存：
+
+```text
+最多缓存最近访问的 50 个活动
+30 分钟未访问自动淘汰
+服务重启或 Pod 重建后清空
+```
+
+- `notes_cache` 缓存已解析的 JSONL 笔记；失效依据是 JSONL 文件路径、修改时间和大小。
+- `media_cache` 缓存图片/视频文件名列表；失效依据是对应媒体目录修改时间。
+- `activity_access` 负责活动访问时间、TTL 和 LRU 淘汰；活动淘汰时必须级联清理该活动的笔记缓存和媒体缓存。
+- 缓存访问使用 `cache_lock`（`threading.RLock`）保护。修改读取、解析或缓存逻辑时，保留签名失效、50 个活动上限、30 分钟 TTL、锁和活动级级联淘汰。
+- 缓存不得写入 SQLite、PVC 或 NFS；它只是性能优化，真实来源仍是原始数据目录。
+
+`sync_collected_from_raw()` 遍历 `list_activities()` 返回的活动对象时，必须提取：
+
+```python
+activity = activity_info["name"]
+```
+
+不得把 `{name, keywords}` 对象直接传给路径拼接、缓存键或数据库写入。
+
 ## 页面规则
 
 - 默认平台优先选择 `xhs`。
+- 平台下拉框将 `xhs` 排在第一项，其余平台保持接口顺序。
 - 左侧活动大类支持折叠，采用手风琴效果。
 - 默认列表只展示 `unmarked` 和 `approved`。
 - `rejected` 从默认可见列表隐藏。
 - 详情页展示小红书原文入口、作者头像、发布时间、互动数据、标签、正文、图片和视频。
 - 页面不展示原始 JSON。
 - 标记 `approved` 后才展示录入目标系统按钮。
+- `#noteDetail` 是普通容器；`.detail-empty` 只用于内部空状态提示，不能加回详情容器本身。
+- `.detail` 保持全宽左对齐和当前内边距，避免不同笔记内容宽度导致详情位置漂移。
+- 审核和录入成功后，优先更新 `state.notes`、`state.detailNote` 并调用 `renderNotes()`、`renderDetail()`；不要重新引入审核后串行 `loadNotes()`、`loadDetail()` 的全量刷新。
 
 ## K8s 约定
 

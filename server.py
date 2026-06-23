@@ -533,7 +533,10 @@ class App:
         count = 0
         for platform in self.list_platforms():
             for category in self.list_categories(platform):
-                for activity in self.list_activities(platform, category):
+                for activity_info in self.list_activities(platform, category):
+                    activity = activity_info.get("name", "").strip()
+                    if not activity:
+                        continue
                     for note in self.read_activity_notes(platform, category, activity):
                         self.mark_collected(
                             platform,
