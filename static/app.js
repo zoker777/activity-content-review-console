@@ -93,18 +93,28 @@ function metricBadges(note) {
     .join("");
 }
 
+function activityKeywordMarkup(keywords) {
+  return (keywords || [])
+    .map((keyword) => `<span class="activity-keyword">${escapeHtml(keyword)}</span>`)
+    .join('<span class="activity-keyword-separator" aria-hidden="true">·</span>');
+}
+
 async function loadPlatforms() {
   const { platforms } = await api("/api/platforms");
-  els.platformSelect.innerHTML = platforms
+  const orderedPlatforms = platforms.includes("xhs")
+    ? ["xhs", ...platforms.filter((platform) => platform !== "xhs")]
+    : platforms;
+
+  els.platformSelect.innerHTML = orderedPlatforms
     .map((platform) => `<option value="${escapeHtml(platform)}">${escapeHtml(platform)}</option>`)
     .join("");
 
-  if (platforms.length === 0) {
+  if (orderedPlatforms.length === 0) {
     els.categoryTree.innerHTML = '<div class="empty">暂无原始数据目录</div>';
     return;
   }
 
-  state.platform = platforms.includes("xhs") ? "xhs" : platforms[0];
+  state.platform = orderedPlatforms[0];
   els.platformSelect.value = state.platform;
   await loadTree();
 }
@@ -142,7 +152,11 @@ async function loadTree() {
                   data-keywords="${escapeHtml(JSON.stringify(activity.keywords || []))}"
                 >
                   <span>${escapeHtml(activity.name)}</span>
-                  ${(activity.keywords || []).length ? `<small>${escapeHtml(activity.keywords.join(" / "))}</small>` : ""}
+                  ${
+                    (activity.keywords || []).length
+                      ? `<small class="activity-keywords" title="${escapeHtml(activity.keywords.join(" · "))}">${activityKeywordMarkup(activity.keywords)}</small>`
+                      : ""
+                  }
                 </button>
               `,
             )
