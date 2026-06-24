@@ -152,15 +152,22 @@ Kubernetes 清单在 `k8s/`。
 
 ```text
 namespace: devops
-SQLite PVC mount: /app/data/db
+SQLite NFS: 10.0.2.96:/data/nfs/k8s/crawl/db
+SQLite mount: /app/data/db
 DB_PATH: /app/data/db/app.sqlite3
-NFS raw data: 10.0.2.96:/data/nfs/k8s/crawl
+NFS raw data: 10.0.2.96:/data/nfs/k8s/crawl/raw
 RAW_DATA_ROOT: /app/data/raw
 MANIFEST_PATH: /app/data/manifest.json
 replicas: 1
 ```
 
-SQLite 有写入操作，不要默认改成多副本。如果需要多副本，应先迁移到 MySQL/PostgreSQL。
+- `raw-data` 只读挂载到 `/app/data/raw`；`sqlite-db` 以可写方式挂载到 `/app/data/db`。NFS 服务端必须预先创建这两个目录并正确授权。
+- Docker 镜像只包含 `server.py`、`static/` 和 `data/manifest.json`；不得将 `data/raw/`、`data/db/` 打包进镜像。
+- `manifest.json` 是内置镜像的菜单/关键词配置，页面菜单优先据此生成，原始数据目录中的额外活动会合并展示。
+- `ingress.yaml` 必须保留在 `kustomization.yaml` 的 `resources` 中；Ingress 使用 `nginx` IngressClass、`activity-review-console.nexuscube.cn` 域名及 `nexuscube-tls` TLS Secret。发布前确保 DNS、证书和 IngressClass 已就绪。
+- 当前服务没有 WebSocket/SSE；不要仅为 Ingress 配置而新增实时通信逻辑或启用 WebSocket 注解。
+- `/api/health` 是轻量 liveness/readiness 接口，只返回 HTTP 状态和路径配置；不要让它访问 NFS、解析 manifest 或读写 SQLite。
+- SQLite 有写入操作，不要默认改成多副本。如果需要多副本，应先迁移到 MySQL/PostgreSQL。
 
 ## 修改约束
 

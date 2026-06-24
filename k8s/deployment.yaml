@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: activity-review-console:latest
+          image: harbor.lifelift.com.cn:9443/e-commerce/activity-content-review-console:v1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -25,6 +25,13 @@ spec:
           envFrom:
             - configMapRef:
                 name: activity-review-console-config
+          resources:
+            requests:
+              cpu: 16m
+              memory: 64Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
           readinessProbe:
             httpGet:
               path: /api/health
@@ -43,11 +50,18 @@ spec:
             - name: raw-data
               mountPath: /app/data/raw
               readOnly: true
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+        - name: lifelift-harbor
+      schedulerName: default-scheduler
       volumes:
         - name: sqlite-db
-          persistentVolumeClaim:
-            claimName: activity-review-sqlite-pvc
+          nfs:
+            server: 10.0.2.96
+            path: /data/nfs/k8s/crawl/db
         - name: raw-data
           nfs:
             server: 10.0.2.96
-            path: /data/nfs/k8s/crawl
+            path: /data/nfs/k8s/crawl/raw

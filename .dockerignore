@@ -1,0 +1,12 @@
+# Runtime data is mounted from NFS and must never be sent to Docker.
+data/raw/
+data/db/
+
+# Local and VCS files.
+.git/
+.gitignore
+__pycache__/
+*.py[cod]
+.DS_Store
+.idea/
+.vscode/

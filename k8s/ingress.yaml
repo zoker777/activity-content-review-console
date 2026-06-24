@@ -1,0 +1,28 @@
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: activity-review-console
+  namespace: devops
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '120'
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/enable-websocket: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - activity-review-console.nexuscube.cn
+    secretName: nexuscube-tls
+  rules:
+    - host: activity-review-console.nexuscube.cn
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: activity-review-console
+                port:
+                  number: 8000

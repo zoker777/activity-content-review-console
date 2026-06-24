@@ -121,7 +121,7 @@ share_count, source_keyword, tag_list, avatar
 data/manifest.json
 ```
 
-清单用于声明平台、内容类别、具体方向和推荐关键词。页面左侧导航优先使用 `manifest.json`，所以还没有爬到数据的活动也会展示出来；如果原始数据目录里出现了清单之外的活动，后端也会合并显示。
+清单用于声明平台、内容类别、具体方向和推荐关键词。页面左侧导航优先使用 `manifest.json`，所以还没有爬到数据的活动也会展示出来；如果原始数据目录里出现了清单之外的活动，后端也会合并显示。Kubernetes 部署时，该文件随镜像内置，不从 NFS 挂载读取。
 
 接口：
 
@@ -226,6 +226,8 @@ GET  /api/media/videos?platform=xhs&category=球类运动&activity=飞盘&noteId
 
 视频接口支持 HTTP Range。浏览器切换视频或取消加载时可能断开连接，后端会静默处理 `ConnectionResetError` 和 `BrokenPipeError`。
 
+`GET /api/health` 用于 Kubernetes 的就绪与存活探针：它只确认 HTTP 服务可响应并返回当前数据路径配置，不会实际读取 NFS、解析 manifest 或连接 SQLite。
+
 ## Kubernetes 部署
 
 K8s 清单放在：
@@ -237,14 +239,18 @@ k8s/
 部署约定：
 
 - namespace：`devops`
-- SQLite：动态 PVC，挂载到 `/app/data/db`
+- SQLite：NFS `10.0.2.96:/data/nfs/k8s/crawl/db`，挂载到 `/app/data/db`
 - SQLite 路径：`DB_PATH=/app/data/db/app.sqlite3`
-- 原始数据：NFS `10.0.2.96:/data/nfs/k8s/crawl`
+- 原始数据：NFS `10.0.2.96:/data/nfs/k8s/crawl/raw`
 - 原始数据挂载：`RAW_DATA_ROOT=/app/data/raw`
 - manifest：`MANIFEST_PATH=/app/data/manifest.json`
 - 副本数：`replicas: 1`
 
 SQLite 有写入操作，不要默认扩成多副本。需要多副本或多人高并发审核时，应迁移到 MySQL/PostgreSQL。
+
+NFS 服务端须预先创建 `crawl/raw` 和 `crawl/db`：应用需要读取 `raw` 目录、写入 `db` 目录。
+
+镜像构建、推送和 Kubernetes 发布步骤见 [k8s/README.md](k8s/README.md)。镜像不包含 `data/raw/` 与 `data/db/`，二者由 NFS 运行时挂载提供。
 
 部署：
 
@@ -267,4 +273,4 @@ kubectl -n devops exec deploy/activity-review-console -- ls -l /app/data/raw
 kubectl -n devops delete pod -l app=activity-review-console
 ```
 
-Pod 重建后刷新页面，审核状态仍在，说明 SQLite PVC 持久化正常。
+Pod 重建后刷新页面，审核状态仍在，说明 SQLite NFS 数据持久化正常。
